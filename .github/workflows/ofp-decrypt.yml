@@ -125,27 +125,56 @@ jobs:
               echo "Not zipping superimages"
           fi
     
-      - name: Upload Decrypted Zip & Get Download link
-        shell: bash
+      - name: Upload Decrypted Zip & Get Download Link
         run: |
-          d_file=$(find -iname 'Decrypted_*.zip')
-          s_file=$(find -iname 'superimages.zip')
-          curl -sSL https://raw.githubusercontent.com/global-index-source/ksau-go/master/setup.sh | bash
-          source ~/.bashrc
-          ksau-go refresh
-          file_link=$(ksau-go upload -f "${d_file}" -r Decrypted_ofp/"${FILENAME}"_decrypt --remote-config saurajcf)
-          echo "${file_link}"
-          # echo "FILE_LINK=${file_link}" >> ${GITHUB_ENV}
-          simg=$SIMG
-          if [ $simg == YES ]
-          then
-              super_link=$(ksau-go upload -f "${s_file}" -r Decrypted_ofp/"${FILENAME}"_decrypt --remote-config saurajcf)
-              echo "${super_link}"            
-              # echo "SUPER_LINK=${super_link}" >> ${GITHUB_ENV}
-          elif [ $simg == NO ]
-          then
-              echo "Not Uploading superimages"
-          fi 
+          # Find the decrypted zip file
+          d_file=$(find . -iname 'Decrypted_*.zip' | head -n 1)
+          s_file=$(find . -iname 'superimages.zip' | head -n 1)
+      
+          # Ensure file was found
+          if [ -z "$d_file" ]; then
+            echo "Error: Decrypted zip file not found!"
+            exit 1
+          fi
+      
+          echo "Uploading: $d_file"
+      
+          # Run the GoFile upload script and capture output
+          upload_output=$(curl -sSL https://raw.githubusercontent.com/elohim-etz/GoFile-Upload/main/upload.sh | bash -s -- "$d_file")
+      
+          # Extract the GoFile download link (assumes line starts with https://gofile.io/d/)
+          file_link=$(echo "$upload_output" | grep -o 'https://gofile.io/d/[a-zA-Z0-9]*' | head -n 1)
+      
+          if [ -z "$file_link" ]; then
+            echo "Error: Failed to extract download link from upload response."
+            echo "$upload_output"
+            exit 1
+          fi
+      
+          # Display and export the link
+          echo "Decrypted File Upload Link: $file_link"
+          echo "FILE_LINK=$file_link" >> $GITHUB_ENV
+      
+          # Optional: Upload superimages.zip if SIMG == YES
+          if [ "$SIMG" = "YES" ]; then
+            if [ -n "$s_file" ]; then
+              echo "Uploading superimages.zip..."
+              super_output=$(curl -sSL https://raw.githubusercontent.com/elohim-etz/GoFile-Upload/main/upload.sh | bash -s -- "$s_file")
+              super_link=$(echo "$super_output" | grep -o 'https://gofile.io/d/[a-zA-Z0-9]*' | head -n 1)
+      
+              if [ -z "$super_link" ]; then
+                echo "Error: Failed to extract superimages download link."
+                exit 1
+              fi
+      
+              echo "Superimages Upload Link: $super_link"
+              echo "SUPER_LINK=$super_link" >> $GITHUB_ENV
+            else
+              echo "Warning: superimages.zip not found, skipping upload."
+            fi
+          else
+            echo "SIMG is 'NO' or unset. Skipping superimages upload."
+          fi
 
       # - name: Download link for the prepared ZIP file
       #   run: |
